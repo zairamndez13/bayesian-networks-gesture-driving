@@ -55,14 +55,14 @@ modelo <- function() {
   p ~ dbeta(1, 1)
 
   # Priori efectos fijos
-  beta0_e ~ dnorm(5, 0.01)
-  beta0_c ~ dnorm(5, 0.01)
+  beta0_e ~ dnorm(0, 0.01)
+  beta0_c ~ dnorm(0, 0.01)
   beta1_c ~ dnorm(0, 0.01)
-  beta0_s ~ dnorm(5, 0.01)
+  beta0_s ~ dnorm(0, 0.01)
   beta3_s ~ dnorm(0, 0.01)
-  beta0_l ~ dnorm(5, 0.01)
+  beta0_l ~ dnorm(0, 0.01)
   beta3_l ~ dnorm(0, 0.01)
-  beta0_p ~ dnorm(5, 0.01)
+  beta0_p ~ dnorm(0, 0.01)
   beta3_p ~ dnorm(0, 0.01)
 
   # Priori para efectos sexo (hombre vs mujer)
@@ -279,5 +279,6 @@ df_hombre <- predictiva_condicional_va(modelo_vafase, sexo = "hombre")
 analizar_condicional_boxplot(df_mujer,"Y_P")
 analizar_condicional_boxplot(df_hombre,"Y_P")
 ```
+
 
 
