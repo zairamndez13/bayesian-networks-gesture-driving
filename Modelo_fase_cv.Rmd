@@ -47,11 +47,11 @@ modelo <- function() {
   }
 
   # Priors 
-  beta0_f ~ dnorm(5, 0.01)
-  beta0_c ~ dnorm(5, 0.01); beta3_c ~ dnorm(0, 0.01)
-  beta0_s ~ dnorm(5, 0.01); beta3_s ~ dnorm(0, 0.01)
-  beta0_l ~ dnorm(5, 0.01); beta3_l ~ dnorm(0, 0.01)
-  beta0_p ~ dnorm(5, 0.01); beta3_p ~ dnorm(0, 0.01)
+  beta0_f ~ dnorm(0, 0.01)
+  beta0_c ~ dnorm(0, 0.01); beta3_c ~ dnorm(0, 0.01)
+  beta0_s ~ dnorm(0, 0.01); beta3_s ~ dnorm(0, 0.01)
+  beta0_l ~ dnorm(0, 0.01); beta3_l ~ dnorm(0, 0.01)
+  beta0_p ~ dnorm(0, 0.01); beta3_p ~ dnorm(0, 0.01)
 
   # Efectos fijos (sexo: por defecto mujer)
   beta1_f[1] <- 0; beta1_f[2] ~ dnorm(0, 0.01)
@@ -308,3 +308,4 @@ analizar_condicional_boxplot(df_mujer_provocacion, "Y_P")
 analizar_condicional_boxplot(df_hombre_provocacion,"Y_C")
 
 ```
+
