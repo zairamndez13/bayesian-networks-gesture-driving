@@ -1,0 +1,283 @@
+---
+title: "Modelo_fase_va"
+author: "Zaïra Méndez"
+date: "2025-06-19"
+output: html_document
+---
+
+```{r}
+library(R2WinBUGS)
+library(dplyr)
+```
+
+
+#MODELO WINBUGS
+```{r}
+modelo <- function() {
+  for (i in 1:n) {
+
+    # Variable latente para la fase (Basal = 0, Provocación = 1)
+    fase[i] ~ dbern(p)
+    fase_aux[i] <- fase[i] + 1
+
+    # Modelo para Rage (Y_E)
+    Rage[i] ~ dbeta(alpha_f[i], beta_f[i])
+    alpha_f[i] <- mu_f[i] * phi_f
+    beta_f[i]  <- (1 - mu_f[i]) * phi_f
+    logit(mu_f[i]) <- beta0_e + beta1_f[Sexo[i]] + beta2_f[fase_aux[i]] + b.indiv_f[Usuario[i]]
+
+    # Modelo para AU04 (Y_C)
+    Media_meanAU4[i] ~ dbeta(alpha_c[i], beta_c[i])
+    alpha_c[i] <- mu_c[i] * phi_c
+    beta_c[i]  <- (1 - mu_c[i]) * phi_c
+    logit(mu_c[i]) <- beta0_c + beta1_c * Rage[i] + beta1_c[Sexo[i]] + beta2_c[fase_aux[i]]
+
+    # Modelo para AU12 (Y_L)
+    Media_meanAU12[i] ~ dbeta(alpha_s[i], beta_s[i])
+    alpha_s[i] <- mu_s[i] * phi_s
+    beta_s[i]  <- (1 - mu_s[i]) * phi_s
+    logit(mu_s[i]) <- beta0_s + beta3_s * Rage[i] + beta1_s[Sexo[i]] + beta2_s[fase_aux[i]]
+
+    # Modelo para AU24 (Y_K)
+    Media_meanAU24[i] ~ dbeta(alpha_l[i], beta_l[i])
+    alpha_l[i] <- mu_l[i] * phi_l
+    beta_l[i]  <- (1 - mu_l[i]) * phi_l
+    logit(mu_l[i]) <- beta0_l + beta3_l * Rage[i] + beta1_l[Sexo[i]] + beta2_l[fase_aux[i]]
+
+    # Modelo para AU05 (Y_P)
+    Media_meanAU5[i] ~ dbeta(alpha_p[i], beta_p[i])
+    alpha_p[i] <- mu_p[i] * phi_p
+    beta_p[i]  <- (1 - mu_p[i]) * phi_p
+    logit(mu_p[i]) <- beta0_p + beta3_p * Rage[i] + beta1_p[Sexo[i]] + beta2_p[fase_aux[i]]
+  }
+
+  # Priori para p
+  p ~ dbeta(1, 1)
+
+  # Priori efectos fijos
+  beta0_e ~ dnorm(5, 0.01)
+  beta0_c ~ dnorm(5, 0.01)
+  beta1_c ~ dnorm(0, 0.01)
+  beta0_s ~ dnorm(5, 0.01)
+  beta3_s ~ dnorm(0, 0.01)
+  beta0_l ~ dnorm(5, 0.01)
+  beta3_l ~ dnorm(0, 0.01)
+  beta0_p ~ dnorm(5, 0.01)
+  beta3_p ~ dnorm(0, 0.01)
+
+  # Priori para efectos sexo (hombre vs mujer)
+  beta1_f[1] <- 0
+  beta1_f[2] ~ dnorm(0, 0.01)
+  beta1_c[1] <- 0
+  beta1_c[2] ~ dnorm(0, 0.01)
+  beta1_s[1] <- 0
+  beta1_s[2] ~ dnorm(0, 0.01)
+  beta1_l[1] <- 0
+  beta1_l[2] ~ dnorm(0, 0.01)
+  beta1_p[1] <- 0
+  beta1_p[2] ~ dnorm(0, 0.01)
+
+  # Priori para efectos fase (provocación vs basal)
+  beta2_f[1] <- 0
+  beta2_f[2] ~ dnorm(0, 0.01)
+  beta2_c[1] <- 0
+  beta2_c[2] ~ dnorm(0, 0.01)
+  beta2_s[1] <- 0
+  beta2_s[2] ~ dnorm(0, 0.01)
+  beta2_l[1] <- 0
+  beta2_l[2] ~ dnorm(0, 0.01)
+  beta2_p[1] <- 0
+  beta2_p[2] ~ dnorm(0, 0.01)
+
+  # Efectos aleatorios por individuo (solo Rage)
+  for (k in 1:34) {
+    b.indiv_f[k] ~ dnorm(0, tau.indiv_f)
+  }
+  tau.indiv_f <- pow(sd.indiv_f, -2)
+  sd.indiv_f ~ dunif(0, 1000)
+
+  # Priori para phi
+  phi_f ~ dgamma(1, 0.1)
+  phi_c ~ dgamma(1, 0.1)
+  phi_s ~ dgamma(1, 0.1)
+  phi_l ~ dgamma(1, 0.1)
+  phi_p ~ dgamma(1, 0.1)
+}
+
+
+# Datos preparados
+
+datos <- list(
+  Rage = pmin(pmax(datosnew$Rage, 0.0001), 0.9999),
+  Media_meanAU4 = datosnew$AU04_Mean,
+  Media_meanAU12 = datosnew$AU12_Mean,
+  Media_meanAU24 = datosnew$AU24_Mean,
+  Media_meanAU5 = datosnew$AU05_Mean,
+  Sexo = ifelse(datosnew$Sex == "F", 1, 2),
+  fase = ifelse(datosnew$Phase == "Baseline 2", 0, 1),
+  Usuario = datosnew$User,
+  n = nrow(datosnew)
+)
+
+# Inicialización
+iniciales <- function() {
+  list(
+    beta0_e=rnorm(1),
+    beta0_c=rnorm(1), beta1_c=rnorm(1),
+    beta0_s=rnorm(1), beta3_s=rnorm(1),
+    beta0_l=rnorm(1), beta3_l=rnorm(1),
+    beta0_p=rnorm(1), beta3_p=rnorm(1),
+    
+    beta1_f=c(NA, rnorm(1)), beta1_c=c(NA, rnorm(1)),
+    beta1_s=c(NA, rnorm(1)), beta1_l=c(NA, rnorm(1)), beta1_p=c(NA, rnorm(1)),
+    
+    beta2_f=c(NA, rnorm(1)), beta2_c=c(NA, rnorm(1)),
+    beta2_s=c(NA, rnorm(1)), beta2_l=c(NA, rnorm(1)), beta2_p=c(NA, rnorm(1)),
+    
+    sd.indiv_f=runif(1, 0, 100), b.indiv_f=rnorm(34, 0, 1),
+    
+    p = runif(1),
+    
+    phi_f=rgamma(1, 1, 0.1), phi_c=rgamma(1, 1, 0.1),
+    phi_s=rgamma(1, 1, 0.1), phi_l=rgamma(1, 1, 0.1), phi_p=rgamma(1, 1, 0.1)
+  )
+}
+
+# Parámetros a monitorizar
+param <- c("beta0_e", "beta0_c", "beta1_c", "beta0_s", "beta3_s", "beta0_l", "beta3_l", "beta0_p", "beta3_p",
+           "beta1_f", "beta1_c", "beta1_s", "beta1_l", "beta1_p",
+           "beta2_f", "beta2_c", "beta2_s", "beta2_l", "beta2_p",
+           "p",
+           "phi_f", "phi_c", "phi_s", "phi_l", "phi_p",
+           "sd.indiv_f", "b.indiv_f")
+
+# Llamada al modelo
+modelo_vafase <- bugs(
+  data = datos,
+  inits = iniciales,
+  parameters = param,
+  model = modelo,
+  bugs.directory = "C:/Users/crist/OneDrive/Escritorio/MASTER_BIO/PRIMER CURSO/CUARTO MÓDULO/MJB/WinBUGS14/WinBUGS14",
+  n.iter = 4000000, 
+  n.burnin = 500000,
+  n.thin=1300,
+  debug = TRUE
+)
+
+round(modelo_vafase$summary, 2)
+
+save(modelo_vafase, file="Modelo_vafase_def.Rdata")
+
+```
+
+#PREDICTIVAS SEGÚN SEXO
+```{r}
+predictiva_condicional_va <- function(modelo, sexo = c("mujer", "hombre")) {
+  inv_logit <- function(x) 1 / (1 + exp(-x))
+  sexo <- match.arg(sexo)
+  
+  # Extraer simulaciones Y_E
+  set.seed(123)
+  yE_pred <- rbinom(length(modelo_vafase$sims.list$p),1,modelo$sims.list$p)
+  
+  # Extraer cadenas base Y_F
+  beta0_f    <- modelo$sims.list$beta0_e        
+  phi_f      <- modelo$sims.list$phi_e          
+  sd_indiv_f <- modelo$sims.list$sd.indiv_e     
+  n_sims <- length(beta0_f)
+  
+  # Efectos sexo en Y_F
+  b_hombre_f <- if(sexo == "hombre") modelo$sims.list$b.hombre_e else rep(0, n_sims)
+  b_fase_f   <- modelo$sims.list$b.fase_e 
+  
+  # Efecto aleatorio
+  set.seed(123)
+  b_f <- rnorm(n_sims, mean = 0, sd = sd_indiv_f)
+  
+  # Logit mu Y_F
+  logit_mu_f <- beta0_f + b_f + b_hombre_f + b_fase_f*yE_pred
+  mu_f <- inv_logit(logit_mu_f)
+  alpha_f <- mu_f * phi_f
+  beta_f <- (1 - mu_f) * phi_f
+  
+  yF_pred <- rbeta(n_sims, alpha_f, beta_f)
+  
+  # Extraer coeficientes gestos
+  beta0_c <- modelo$sims.list$beta0_c
+  beta0_s <- modelo$sims.list$beta0_l
+  beta0_l <- modelo$sims.list$beta0_k
+  beta0_p <- modelo$sims.list$beta0_p
+  
+  beta1_c <- if(sexo == "hombre") modelo$sims.list$b.hombre_c else rep(0, n_sims)
+  beta1_s <- if(sexo == "hombre") modelo$sims.list$b.hombre_l else rep(0, n_sims)
+  beta1_l <- if(sexo == "hombre") modelo$sims.list$b.hombre_k else rep(0, n_sims)
+  beta1_p <- if(sexo == "hombre") modelo$sims.list$b.hombre_p else rep(0, n_sims)
+  
+  beta2_c <-  modelo$sims.list$b.fase_c 
+  beta2_s <-  modelo$sims.list$b.fase_l 
+  beta2_l <-  modelo$sims.list$b.fase_k
+  beta2_p <- modelo$sims.list$b.fase_p 
+  
+  beta3_c <- modelo$sims.list$beta1_c
+  beta3_s <- modelo$sims.list$beta1_l
+  beta3_l <- modelo$sims.list$beta1_k
+  beta3_p <- modelo$sims.list$beta1_p
+  
+  phi_c <- modelo$sims.list$phi_c
+  phi_s <- modelo$sims.list$phi_l
+  phi_l <- modelo$sims.list$phi_k
+  phi_p <- modelo$sims.list$phi_p
+  
+  # Calcular gestos
+  logit_mu_c <- beta0_c + beta1_c + beta2_c*yE_pred + beta3_c * yF_pred
+  mu_c <- inv_logit(logit_mu_c)
+  alpha_c <- mu_c * phi_c
+  beta_c <- (1 - mu_c) * phi_c
+  yC_pred <- rbeta(n_sims, alpha_c, beta_c)
+  
+  logit_mu_s <- beta0_s + beta1_s + beta2_s*yE_pred + beta3_s * yF_pred
+  mu_s <- inv_logit(logit_mu_s)
+  alpha_s <- mu_s * phi_s
+  beta_s <- (1 - mu_s) * phi_s
+  yS_pred <- rbeta(n_sims, alpha_s, beta_s)
+  
+  logit_mu_l <- beta0_l + beta1_l + beta2_l*yE_pred + beta3_l * yF_pred
+  mu_l <- inv_logit(logit_mu_l)
+  alpha_l <- mu_l * phi_l
+  beta_l <- (1 - mu_l) * phi_l
+  yL_pred <- rbeta(n_sims, alpha_l, beta_l)
+  
+  logit_mu_p <- beta0_p + beta1_p + beta2_p*yE_pred + beta3_p * yF_pred
+  mu_p <- inv_logit(logit_mu_p)
+  alpha_p <- mu_p * phi_p
+  beta_p <- (1 - mu_p) * phi_p
+  yP_pred <- rbeta(n_sims, alpha_p, beta_p)
+  
+  # Dataframe final
+  data.frame(
+    Y_F = yF_pred,
+    Y_C = yC_pred,
+    Y_S = yS_pred,
+    Y_L = yL_pred,
+    Y_P = yP_pred
+  )
+}
+
+```
+```
+
+```{r}
+# Mujer
+df_mujer <- predictiva_condicional_va(modelo_vafase, sexo = "mujer")
+
+# Hombre
+df_hombre <- predictiva_condicional_va(modelo_vafase, sexo = "hombre")
+```
+
+
+```{r}
+analizar_condicional_boxplot(df_mujer,"Y_P")
+analizar_condicional_boxplot(df_hombre,"Y_P")
+```
+
+
