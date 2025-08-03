@@ -1,0 +1,313 @@
+---
+title: "Modelo sin fase"
+author: "Zaïra Méndez"
+date: "2025-06-18"
+output: html_document
+---
+
+```{r}
+library(R2WinBUGS)
+```
+
+#MODELO WINBUGS
+```{r}
+modelo <- function() {
+  for (i in 1:n) {
+    
+    # Y_Fi|theta ~ Be(alpha_f(i), beta_f(i))
+    Rage[i] ~ dbeta(alpha_f[i], beta_f[i])
+    
+    alpha_f[i] <- mu_f[i]*phi_f
+    beta_f[i] <- (1 - mu_f[i])*phi_f
+    
+    logit(mu_f[i]) <- beta0_f + beta1_f[Sexo[i]]
+    
+    Media_meanAU4[i] ~ dbeta(alpha_c[i], beta_c[i])
+    
+    alpha_c[i] <- mu_c[i]*phi_c
+    beta_c[i] <- (1 - mu_c[i])*phi_c
+    
+    logit(mu_c[i]) <- beta0_c + beta1_c[Sexo[i]] + beta2_c*Rage[i] 
+    
+    Media_meanAU12[i] ~ dbeta(alpha_s[i], beta_s[i])
+    
+    alpha_s[i] <- mu_s[i]*phi_s
+    beta_s[i] <- (1 - mu_s[i])*phi_s
+    
+    logit(mu_s[i]) <- beta0_s  + beta2_s*Rage[i] + beta1_s[Sexo[i]]
+    
+    Media_meanAU24[i] ~ dbeta(alpha_l[i], beta_l[i])
+    
+    alpha_l[i] <- mu_l[i]*phi_l
+    beta_l[i] <- (1 - mu_l[i])*phi_l
+    
+    logit(mu_l[i]) <- beta0_l + beta2_l*Rage[i] + beta1_l[Sexo[i]]
+    
+    Media_meanAU5[i] ~ dbeta(alpha_p[i], beta_p[i])
+    
+    alpha_p[i] <- mu_p[i]*phi_p
+    beta_p[i] <- (1 - mu_p[i])*phi_p
+    
+    logit(mu_p[i]) <- beta0_p + beta2_p*Rage[i] + beta1_p[Sexo[i]]
+  }
+  
+  # Priors
+  beta0_f ~ dnorm(0,0.01)
+  beta0_c ~ dnorm(0,0.01)
+  beta2_c ~ dnorm(0,0.01)
+  beta0_s ~ dnorm(0,0.01)
+  beta2_s ~ dnorm(0,0.01)
+  beta0_l ~ dnorm(0,0.01)
+  beta2_l ~ dnorm(0,0.01)
+  beta0_p ~ dnorm(0,0.01)
+  beta2_p ~ dnorm(0,0.01)
+
+  # EFECTOS FIJOS (sexo)
+  beta1_f[1] <- 0
+  beta1_f[2] ~ dnorm(0,0.01)
+
+  beta1_c[1] <- 0
+  beta1_c[2] ~ dnorm(0,0.01)
+
+  beta1_s[1] <- 0
+  beta1_s[2] ~ dnorm(0,0.01)
+
+  beta1_l[1] <- 0
+  beta1_l[2] ~ dnorm(0,0.01)
+
+  beta1_p[1] <- 0
+  beta1_p[2] ~ dnorm(0,0.01)
+  
+  # Dispersión
+  phi_f ~ dgamma(1, 0.1)
+  phi_c ~ dgamma(1, 0.1)
+  phi_s ~ dgamma(1, 0.1)
+  phi_l ~ dgamma(1, 0.1)
+  phi_p ~ dgamma(1, 0.1)
+}
+
+datos <- list(
+  Rage = pmin(pmax(datosnew$Rage, 0.0001), 0.9999), 
+  Media_meanAU4 = datosnew$AU04_Mean,  
+  Media_meanAU12 = datosnew$AU12_Mean,
+  Media_meanAU24 = datosnew$AU24_Mean, 
+  Media_meanAU5 = datosnew$AU05_Mean, 
+  Sexo = as.numeric(datosnew$Sex),
+  n = dim(datosnew)[1]
+)
+
+iniciales <- function() {
+  list(
+    beta0_f = rnorm(1), beta0_c = rnorm(1), beta2_c = rnorm(1), 
+    beta0_s = rnorm(1), beta2_s = rnorm(1),
+    beta0_l = rnorm(1), beta2_l = rnorm(1),  
+    beta0_p = rnorm(1), beta2_p = rnorm(1),
+    
+    beta1_f = c(NA, rnorm(1)), 
+    beta1_c = c(NA, rnorm(1)), 
+    beta1_s = c(NA, rnorm(1)),   
+    beta1_l = c(NA, rnorm(1)), 
+    beta1_p = c(NA, rnorm(1)),
+
+    phi_f = rgamma(1, 1, 0.1), 
+    phi_c = rgamma(1, 1, 0.1), 
+    phi_s = rgamma(1, 1, 0.1), 
+    phi_l = rgamma(1, 1, 0.1), 
+    phi_p = rgamma(1, 1, 0.1)
+  )
+}
+
+param <- c(
+  "mu_f",
+  "beta0_f", "beta0_c", "beta2_c", "beta0_s", "beta2_s", 
+  "beta0_l", "beta2_l", "beta0_p", "beta2_p",
+  "beta1_f", "beta1_c", "beta1_s", "beta1_l", "beta1_p",
+  "phi_f", "phi_c", "phi_s", "phi_l", "phi_p"
+)
+
+modelo_sinfase <- bugs(
+  data = datos, 
+  inits = iniciales, 
+  parameters = param, 
+  model = modelo, 
+  bugs.directory = "C:/.../WinBUGS14", 
+  n.iter = 4000000, 
+  n.burnin = 500000,
+  n.thin=1300,
+  debug = TRUE
+)
+
+save(modelo_sinfase, file="Modelo_sinfase_def.Rdata")
+```
+
+
+#DISTRIBUCIÓN A POSTERIORI DE MU_F
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Se extraen muestras posteriores de beta0_f y beta1_f
+beta0 <- modelo_sinfase$sims.list$beta0_f
+beta1 <- modelo_sinfase$sims.list$beta1_f # efecto marginal del hombre
+
+# Calcular mu_f para mujer 
+logit_mu_F <- beta0
+mu_F <- 1 / (1 + exp(-logit_mu_F))
+
+# Calcular mu_f para hombre
+logit_mu_M <- beta0 + beta1
+mu_M <- 1 / (1 + exp(-logit_mu_M))
+
+df_mu <- data.frame(
+  mu = c(mu_F, mu_M),
+  Sexo = factor(rep(c("Femenino", "Masculino"), each = length(mu_F)),
+                levels = c("Femenino", "Masculino"))
+)
+
+# Graficar con ggplot2 usando tus colores
+ggplot(df_mu, aes(x = mu, fill = Sexo)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("Femenino" = "#2F4F4F", "Masculino" = "#4E8A4F")) +
+  labs(title = "",
+       x = expression(mu[f]),
+       y = "Densidad") +
+  theme_minimal()
+
+
+```
+
+
+#PREDICTIVA PARA HOMBRE Y MUJER
+```{r}
+generar_predictiva <- function(modelo_sinfase, sexo = c("mujer", "hombre")) {
+  sexo <- match.arg(sexo)
+  
+  # Obtener cadenas MCMC
+  beta0_f <- modelo_sinfase$sims.list$beta0_f
+  beta1_f <- modelo_sinfase$sims.list$beta1_f 
+  phi_f   <- modelo_sinfase$sims.list$phi_f
+  
+  # Incluir efecto beta1_f solo si es hombre
+  if (sexo == "hombre") {
+    logit_mu_f <- beta0_f + beta1_f
+  } else {
+    logit_mu_f <- beta0_f
+  }
+  mu_f <- 1 / (1 + exp(-logit_mu_f))
+  alpha_f <- mu_f * phi_f
+  beta_f  <- (1 - mu_f) * phi_f
+  set.seed(123)
+  yF_pred <- rbeta(length(mu_f), alpha_f, beta_f)
+  
+  # Función auxiliar para calcular Y_* dados beta0, beta1, beta2, phi y yF
+  generar_gesto <- function(beta0, beta1, beta2, phi) {
+    if (sexo == "hombre") {
+      logit_mu <- beta0 + beta1 + beta2 * yF_pred
+    } else {
+      logit_mu <- beta0 + beta2 * yF_pred
+    }
+    mu <- 1 / (1 + exp(-logit_mu))
+    alpha <- mu * phi
+    beta <- (1 - mu) * phi
+    rbeta(length(mu), alpha, beta)
+  }
+  
+  # Cadenas para cada gesto
+  beta0_c <- modelo_sinfase$sims.list$beta0_c
+  beta1_c <- modelo_sinfase$sims.list$beta1_c
+  beta2_c <- modelo_sinfase$sims.list$beta2_c
+  phi_c   <- modelo_sinfase$sims.list$phi_c
+  
+  beta0_s <- modelo_sinfase$sims.list$beta0_s
+  beta1_s <- modelo_sinfase$sims.list$beta1_s
+  beta2_s <- modelo_sinfase$sims.list$beta2_s
+  phi_s   <- modelo_sinfase$sims.list$phi_s
+  
+  beta0_l <- modelo_sinfase$sims.list$beta0_l
+  beta1_l <- modelo_sinfase$sims.list$beta1_l
+  beta2_l <- modelo_sinfase$sims.list$beta2_l
+  phi_l   <- modelo_sinfase$sims.list$phi_l
+  
+  beta0_p <- modelo_sinfase$sims.list$beta0_p
+  beta1_p <- modelo_sinfase$sims.list$beta1_p
+  beta2_p <- modelo_sinfase$sims.list$beta2_p
+  phi_p   <- modelo_sinfase$sims.list$phi_p
+  
+  # Generar gestos
+  yC_pred <- generar_gesto(beta0_c, beta1_c, beta2_c, phi_c)
+  yS_pred <- generar_gesto(beta0_s, beta1_s, beta2_s, phi_s)
+  yL_pred <- generar_gesto(beta0_l, beta1_l, beta2_l, phi_l)
+  yP_pred <- generar_gesto(beta0_p, beta1_p, beta2_p, phi_p)
+  
+  # Resultado
+  df <- data.frame(
+    Y_F = yF_pred,
+    Y_C = yC_pred,
+    Y_S = yS_pred,
+    Y_L = yL_pred,
+    Y_P = yP_pred
+  )
+  
+  return(df)
+}
+```
+
+
+```{r}
+#boxplot según intervalos de la predictiva condicionada al gesto
+analizar_condicional_boxplot <- function(data, gesto_var) {
+  
+  library(dplyr)
+  library(ggplot2)
+  
+  bin_col <- paste0(gesto_var, "_bin")
+  
+  # Definir cortes y etiquetas
+  breaks <- c(0.00, 0.25, 0.50, 0.75, 1.00)
+  labels <- c("[0,0.25]", "(0.25,0.5]", "(0.5,0.75]", "(0.75,1]")
+  
+  data[[bin_col]] <- cut(
+    data[[gesto_var]],
+    breaks = breaks,
+    labels = labels,
+    include.lowest = TRUE,
+    right = TRUE
+  )
+  
+  resumen <- data %>%
+    group_by(across(all_of(bin_col))) %>%
+    summarise(
+      n = n(),
+      media_YF = round(mean(Y_F), 2),
+      sd_YF = round(sd(Y_F), 2),
+      q025 = quantile(Y_F, 0.025),
+      q975 = quantile(Y_F, 0.975),
+      .groups = "drop"
+    )
+  
+  print(resumen)
+  
+  # Boxplot con color y subíndice en etiquetas
+  p <- ggplot(data, aes_string(x = bin_col, y = "Y_F")) +
+    geom_boxplot(fill = "#4E8A4F", alpha = 0.7) +
+    labs(
+      title = "",
+      x = bquote(Y[C] ~ "(intervalos)"),
+      y = expression(Y[F] ~ "(Nivel de furia)")
+    ) +
+    theme_minimal()
+  
+  print(p)
+  
+  invisible(list(resumen = resumen, plot = p))
+}
+```
+
+```{r}
+predictiva_mujer <- generar_predictiva(modelo_sinfase, sexo = "mujer")
+predictiva_hombre <- generar_predictiva(modelo_sinfase, sexo = "hombre")
+
+analizar_condicional_boxplot(predictiva_mujer,"Y_C")
+analizar_condicional_boxplot(predictiva_hombre,"Y_C")
+```
+
