@@ -32,13 +32,13 @@ modelo <- function() {
     beta_c[i]  <- (1 - mu_c[i]) * phi_c
     logit(mu_c[i]) <- beta0_c + beta1_c * Rage[i] + beta1_c[Sexo[i]] + beta2_c[fase_aux[i]]
 
-    # Modelo para AU12 (Y_L)
+    # Modelo para AU12 (Y_S)
     Media_meanAU12[i] ~ dbeta(alpha_s[i], beta_s[i])
     alpha_s[i] <- mu_s[i] * phi_s
     beta_s[i]  <- (1 - mu_s[i]) * phi_s
     logit(mu_s[i]) <- beta0_s + beta3_s * Rage[i] + beta1_s[Sexo[i]] + beta2_s[fase_aux[i]]
 
-    # Modelo para AU24 (Y_K)
+    # Modelo para AU24 (Y_L)
     Media_meanAU24[i] ~ dbeta(alpha_l[i], beta_l[i])
     alpha_l[i] <- mu_l[i] * phi_l
     beta_l[i]  <- (1 - mu_l[i]) * phi_l
@@ -279,6 +279,7 @@ df_hombre <- predictiva_condicional_va(modelo_vafase, sexo = "hombre")
 analizar_condicional_boxplot(df_mujer,"Y_P")
 analizar_condicional_boxplot(df_hombre,"Y_P")
 ```
+
 
 
 
